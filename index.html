@@ -1,0 +1,353 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FitTrack — Mobile Gym Tracker</title>
+  <meta name="description" content="Mobile-first gym progress tracker. Log weight, measurements, workouts, photos and see charts. Works offline and stores data locally." />
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* Mobile-first simple clean styling */
+    :root{
+      --bg:#0f1720; /* dark */
+      --card:#0b1220;
+      --accent:#3BAFFF;
+      --accent-2:#FF3B3B;
+      --muted:#94a3b8;
+      --glass: rgba(255,255,255,0.04);
+      --radius:14px;
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      color-scheme: dark;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#071018);color:#e6eef8}
+    .app{max-width:900px;margin:0 auto;padding:18px}
+    header{display:flex;align-items:center;gap:12px}
+    .logo{display:flex;align-items:center;gap:10px}
+    .logo .icon{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center;font-weight:800}
+    h1{font-size:18px;margin:0}
+    p.lead{margin:0;color:var(--muted);font-size:13px}/* Cards */
+.grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:16px}
+.card{background:var(--card);border-radius:var(--radius);padding:12px;box-shadow:0 6px 18px rgba(2,6,23,0.7)}
+.row{display:flex;gap:12px}
+.muted{color:var(--muted);font-size:13px}
+
+/* form */
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:8px}
+input[type="number"], input[type="text"], select, textarea{width:100%;padding:10px;border-radius:10px;border:0;background:var(--glass);color:inherit;outline:none}
+button{background:linear-gradient(90deg,var(--accent),var(--accent-2));border:0;padding:10px 12px;border-radius:10px;color:#071018;font-weight:700}
+.btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--accent)}
+
+/* Dashboard stats */
+.stats{display:flex;gap:10px;overflow:auto;padding-bottom:4px}
+.stat{min-width:120px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:10px;border-radius:12px}
+.big{font-size:20px;font-weight:800}
+
+/* Charts */
+.chart-wrap{height:220px}
+
+/* gallery */
+.gallery{display:flex;gap:8px;overflow:auto}
+.gallery img{height:120px;border-radius:10px;object-fit:cover}
+
+footer{margin-top:18px;color:var(--muted);font-size:13px;text-align:center}
+
+/* responsive */
+@media(min-width:720px){
+  .grid{grid-template-columns:1fr 360px}
+  header h1{font-size:20px}
+  .chart-wrap{height:300px}
+}
+
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="logo">
+        <div class="icon">FT</div>
+        <div>
+          <h1>FitTrack</h1>
+          <p class="lead">Track. Transform. Triumph.</p>
+        </div>
+      </div>
+    </header><main class="grid">
+  <!-- LEFT: MAIN DASHBOARD -->
+  <section class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div class="muted">Welcome back</div>
+        <div style="font-weight:800;font-size:16px" id="userName">Guest</div>
+      </div>
+      <div>
+        <button class="btn-ghost" id="editProfileBtn">Edit Profile</button>
+      </div>
+    </div>
+
+    <div class="stats" style="margin-top:12px" id="quickStats"></div>
+
+    <hr style="border:0;border-top:1px solid rgba(255,255,255,0.04);margin:12px 0">
+
+    <!-- Weight log form -->
+    <div style="display:flex;gap:8px;align-items:center">
+      <div style="flex:1">
+        <label for="weightInput">Log Weight (kg)</label>
+        <input id="weightInput" type="number" min="1" step="0.1" placeholder="e.g. 68.5" />
+      </div>
+      <div style="width:120px">
+        <label>&nbsp;</label>
+        <button id="logWeightBtn">Add</button>
+      </div>
+    </div>
+
+    <div style="margin-top:12px" class="chart-wrap card" >
+      <canvas id="weightChart"></canvas>
+    </div>
+
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <div style="flex:1">
+        <label for="workoutName">Quick Workout Log</label>
+        <input id="workoutName" type="text" placeholder="e.g. Push-ups 20" />
+      </div>
+      <div style="width:120px">
+        <label>&nbsp;</label>
+        <button id="logWorkoutBtn">Save</button>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <label>Recent Workouts</label>
+      <div id="recentWorkouts" class="muted" style="font-size:14px"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="exportBtn">Export JSON</button>
+      <button id="importBtn" class="btn-ghost">Import</button>
+      <input id="fileInput" type="file" style="display:none" accept="application/json" />
+    </div>
+  </section>
+
+  <!-- RIGHT: SIDEBAR -->
+  <aside>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="muted">Goal</div>
+          <div id="goalText">Lose fat / Gain muscle</div>
+        </div>
+        <div>
+          <button id="changeGoalBtn" class="btn-ghost">Change</button>
+        </div>
+      </div>
+
+      <hr style="border:0;border-top:1px solid rgba(255,255,255,0.04);margin:12px 0">
+
+      <div>
+        <label>Measurements</label>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input id="chest" type="number" placeholder="Chest cm" />
+          <input id="waist" type="number" placeholder="Waist cm" />
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input id="arm" type="number" placeholder="Arm cm" />
+          <input id="thigh" type="number" placeholder="Thigh cm" />
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button id="saveMeasureBtn">Save</button>
+          <button id="clearDataBtn" class="btn-ghost">Clear All</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="muted">Progress Photos</div>
+          <div style="font-weight:700">Gallery</div>
+        </div>
+        <div>
+          <input id="photoInput" type="file" accept="image/*" style="display:none" />
+          <button id="addPhotoBtn" class="btn-ghost">Add</button>
+        </div>
+      </div>
+      <div class="gallery" id="gallery"></div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="muted">Data & Help</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+        <button id="downloadCSV" class="btn-ghost">Download CSV</button>
+        <button id="clearLocal" class="btn-ghost">Reset Local Data</button>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  Tip: This is a static front-end prototype. It stores data on your phone (localStorage). To keep data safe across devices, connect to a backend later (Firebase / Supabase).
+</footer>
+
+  </div>  <script>
+    // Simple localStorage-based model
+    const KEY = 'fittrack_v1';
+    let state = { profile:{name:'Guest',age:null,height:null}, goal:'Lose fat / Gain muscle', weights:[], workouts:[], measurements:[], photos:[] };
+
+    // utilities
+    function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+    function load(){ const raw = localStorage.getItem(KEY); if(raw){ try{ state = JSON.parse(raw);}catch(e){console.error('load error',e);} } render(); }
+
+    // DOM
+    const userNameEl = document.getElementById('userName');
+    const quickStatsEl = document.getElementById('quickStats');
+    const weightInput = document.getElementById('weightInput');
+    const logWeightBtn = document.getElementById('logWeightBtn');
+    const weightCtx = document.getElementById('weightChart').getContext('2d');
+    const recentWorkouts = document.getElementById('recentWorkouts');
+    const workoutName = document.getElementById('workoutName');
+    const logWorkoutBtn = document.getElementById('logWorkoutBtn');
+    const editProfileBtn = document.getElementById('editProfileBtn');
+    const changeGoalBtn = document.getElementById('changeGoalBtn');
+    const goalText = document.getElementById('goalText');
+    const chest = document.getElementById('chest');
+    const waist = document.getElementById('waist');
+    const arm = document.getElementById('arm');
+    const thigh = document.getElementById('thigh');
+    const saveMeasureBtn = document.getElementById('saveMeasureBtn');
+    const clearDataBtn = document.getElementById('clearDataBtn');
+    const addPhotoBtn = document.getElementById('addPhotoBtn');
+    const photoInput = document.getElementById('photoInput');
+    const gallery = document.getElementById('gallery');
+    const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const fileInput = document.getElementById('fileInput');
+    const downloadCSV = document.getElementById('downloadCSV');
+    const clearLocal = document.getElementById('clearLocal');
+
+    // Chart
+    let weightChart = new Chart(weightCtx, {
+      type:'line',
+      data:{labels:[],datasets:[{label:'Weight (kg)',data:[],fill:false,tension:0.2}]},
+      options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{beginAtZero:false}},responsive:true,maintainAspectRatio:false}
+    });
+
+    // render UI
+    function render(){
+      userNameEl.textContent = state.profile.name || 'Guest';
+      goalText.textContent = state.goal;
+
+      // stats: latest weight, delta, measurements
+      const latest = state.weights.length?state.weights[state.weights.length-1]:null;
+      const first = state.weights.length?state.weights[0]:null;
+      const delta = latest && first ? (latest.value - first.value).toFixed(1) : '-';
+      quickStatsEl.innerHTML = `
+        <div class="stat"><div class="muted">Latest</div><div class="big">${latest?latest.value+' kg':'-'}</div><div class="muted">${latest?new Date(latest.t).toLocaleDateString():'--'}</div></div>
+        <div class="stat"><div class="muted">Change</div><div class="big">${delta=='-'?'-':delta+' kg'}</div><div class="muted">Since ${state.weights.length?new Date(first.t).toLocaleDateString():'--'}</div></div>
+        <div class="stat"><div class="muted">Streak</div><div class="big">${calcStreak()}</div><div class="muted">days logged</div></div>
+      `;
+
+      // chart
+      weightChart.data.labels = state.weights.map(w=>new Date(w.t).toLocaleDateString());
+      weightChart.data.datasets[0].data = state.weights.map(w=>w.value);
+      weightChart.update();
+
+      // workouts
+      recentWorkouts.innerHTML = state.workouts.slice(-6).reverse().map(w=>`<div>• ${w.text} <span class="muted">(${new Date(w.t).toLocaleDateString()})</span></div>`).join('') || '<div class="muted">No workouts yet</div>';
+
+      // gallery
+      gallery.innerHTML = state.photos.slice().reverse().map(p=>`<img src="${p.data}" title="${new Date(p.t).toLocaleDateString()}" />`).join('') || '<div class="muted">No photos</div>';
+
+      // measurements inputs last
+      const lastM = state.measurements.length?state.measurements[state.measurements.length-1]:null;
+      chest.value = lastM?.chest||''; waist.value = lastM?.waist||''; arm.value = lastM?.arm||''; thigh.value = lastM?.thigh||'';
+    }
+
+    function calcStreak(){
+      if(!state.weights.length) return 0;
+      // count consecutive days (approx) from last backwards where days have entries
+      let days = new Set(state.weights.map(w=>new Date(w.t).toDateString()));
+      let streak = 0; let d = new Date();
+      while(true){ if(days.has(d.toDateString())){ streak++; d.setDate(d.getDate()-1) } else break }
+      return streak;
+    }
+
+    // events
+    logWeightBtn.addEventListener('click', ()=>{
+      const v = parseFloat(weightInput.value);
+      if(!v || v<=0) return alert('Enter a valid weight');
+      state.weights.push({value:Math.round(v*10)/10, t: new Date().toISOString()});
+      save(); load(); weightInput.value='';
+    });
+
+    logWorkoutBtn.addEventListener('click', ()=>{
+      const txt = workoutName.value.trim(); if(!txt) return alert('Enter workout text');
+      state.workouts.push({text:txt,t:new Date().toISOString()});
+      save(); load(); workoutName.value='';
+    });
+
+    saveMeasureBtn.addEventListener('click', ()=>{
+      const m = {chest:parseFloat(chest.value)||null, waist:parseFloat(waist.value)||null, arm:parseFloat(arm.value)||null, thigh:parseFloat(thigh.value)||null, t:new Date().toISOString()};
+      state.measurements.push(m); save(); load();
+    });
+
+    clearDataBtn.addEventListener('click', ()=>{
+      if(!confirm('Clear all measurements?')) return; state.measurements=[]; save(); load();
+    });
+
+    addPhotoBtn.addEventListener('click', ()=>photoInput.click());
+    photoInput.addEventListener('change', e=>{
+      const f = e.target.files[0]; if(!f) return; const reader = new FileReader();
+      reader.onload = ()=>{ state.photos.push({data:reader.result,t:new Date().toISOString()}); save(); load(); }
+      reader.readAsDataURL(f);
+      photoInput.value='';
+    });
+
+    exportBtn.addEventListener('click', ()=>{
+      const dataStr = JSON.stringify(state, null, 2);
+      const blob = new Blob([dataStr], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'fittrack-export.json'; a.click(); URL.revokeObjectURL(url);
+    });
+
+    importBtn.addEventListener('click', ()=>fileInput.click());
+    fileInput.addEventListener('change', e=>{
+      const f = e.target.files[0]; if(!f) return; const reader = new FileReader();
+      reader.onload = ()=>{ try{ const imported = JSON.parse(reader.result); if(confirm('Overwrite local data with imported file?')){ state = imported; save(); load(); } }catch(err){alert('Invalid JSON') } }
+      reader.readAsText(f);
+    });
+
+    downloadCSV.addEventListener('click', ()=>{
+      // simple CSV of weights
+      const rows = [['date','weight_kg']]; state.weights.forEach(w=>rows.push([new Date(w.t).toISOString(), w.value]));
+      const csv = rows.map(r=>r.join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv'}); const url = URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='weights.csv'; a.click(); URL.revokeObjectURL(url);
+    });
+
+    clearLocal.addEventListener('click', ()=>{
+      if(!confirm('This will reset ALL local app data. Continue?')) return; localStorage.removeItem(KEY); location.reload();
+    });
+
+    editProfileBtn.addEventListener('click', ()=>{
+      const name = prompt('Your name', state.profile.name||'Guest'); if(name!==null){ state.profile.name = name; save(); load(); }
+    });
+
+    changeGoalBtn.addEventListener('click', ()=>{
+      const g = prompt('Set your primary goal (e.g. Lose fat, Build muscle)', state.goal||''); if(g!==null){ state.goal = g; save(); load(); }
+    });
+
+    // clear data button (danger)
+    clearLocal.addEventListener('click', ()=>{});
+
+    // initial load
+    load();
+
+    // small UX: double-tap gallery to remove (confirm)
+    gallery.addEventListener('dblclick', e=>{
+      if(e.target.tagName!=='IMG') return; const src = e.target.src; if(confirm('Delete this photo?')){ state.photos = state.photos.filter(p=>p.data!==src); save(); load(); }
+    });
+
+    // sample seed if empty
+    if(!state.weights.length){ state.weights.push({value:70,t:new Date(new Date().setDate(new Date().getDate()-10)).toISOString()},{value:69.2,t:new Date(new Date().setDate(new Date().getDate()-6)).toISOString()},{value:68.7,t:new Date(new Date().setDate(new Date().getDate()-2)).toISOString()}); save(); load(); }
+
+  </script></body>
+</html>
